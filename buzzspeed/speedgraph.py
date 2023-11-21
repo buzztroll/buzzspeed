@@ -35,7 +35,7 @@ class DataPoint(object):
 
 
 def make_xfer_graph(point_list, outfile, ping_only=False):
-    fig, ax1 = plt.subplots()
+    fig, ax1 = plt.subplots(figsize=(12, 9))
 
     first_time = point_list[0].timestamp
     last_time = point_list[-1].timestamp
