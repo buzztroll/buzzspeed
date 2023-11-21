@@ -42,13 +42,14 @@ def make_xfer_graph(point_list, outfile, ping_only=False):
 
     times = [p.timestamp for p in point_list]
 
-    xticks = times[0::10]
+    tick_space = int(len(times) / 3)
+    xticks = times[0::tick_space]
     ax1.set_xticks([t.timestamp() - first_time.timestamp() for t in xticks])
     ax1.set_xticklabels([t.strftime("%m/%d %H:%M") for t in xticks])
-    ax1.set(xlabel='time', ylabel='mbps', title='Transfer Speeds')
     ax1.grid(axis='y')
 
     if not ping_only:
+        ax1.set(xlabel='time', ylabel='ms', title='Transfer Speeds')
         dls = [p.download for p in point_list]
         uls = [p.upload for p in point_list]
         ax1.plot([t.timestamp() - first_time.timestamp() for t in times], dls, marker='o', label="Download", color='r')
@@ -56,6 +57,7 @@ def make_xfer_graph(point_list, outfile, ping_only=False):
         plt.legend(loc='upper center')
         plt.title(f"Transfer speed from {first_time.strftime('%m/%d %H:%M')} to {last_time.strftime('%m/%d %H:%M')}")
     else:
+        ax1.set(xlabel='time', ylabel='mbps', title='Transfer Speeds')
         pings = [p.ping for p in point_list]
         ax1.plot([t.timestamp() - first_time.timestamp() for t in times], pings, marker='x', label="Upload", color='b')
         plt.legend(loc='upper center')
