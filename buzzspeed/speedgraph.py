@@ -14,6 +14,7 @@ Options:
   --start=<str>       The date to begin graphing (YYYY-MM-DD_hh:mm)
   --end=<str>         The date to stop graphing (YYYY-MM-DD_hh:mm)
   --outfile=<path>    The image file that will created [default: graph.png]
+  --ping              Make transfer graph (will not make transfer graph)
 '''
 
 
@@ -33,26 +34,32 @@ class DataPoint(object):
             self.timestamp = datetime.datetime.strptime(d['timestamp'], "%Y-%m-%dT%H:%M:%S.%fZ")
 
 
-def make_graph(point_list, outfile):
+def make_xfer_graph(point_list, outfile, ping_only=False):
     fig, ax1 = plt.subplots()
 
     first_time = point_list[0].timestamp
     last_time = point_list[-1].timestamp
 
     times = [p.timestamp for p in point_list]
-    dls = [p.download for p in point_list]
-    uls = [p.upload for p in point_list]
-    pings = [p.ping for p in point_list]
 
     xticks = times[0::10]
     ax1.set_xticks([t.timestamp() - first_time.timestamp() for t in xticks])
     ax1.set_xticklabels([t.strftime("%m/%d %H:%M") for t in xticks])
     ax1.set(xlabel='time', ylabel='mbps', title='Transfer Speeds')
     ax1.grid(axis='y')
-    ax1.plot([t.timestamp() - first_time.timestamp() for t in times], dls, marker='o', label="Download", color='r')
-    ax1.plot([t.timestamp() - first_time.timestamp() for t in times], uls, marker='x', label="Upload", color='b')
-    plt.legend(loc='upper center')
-    plt.title(f"Transfer speed from {first_time.strftime('%m/%d %H:%M')} to {last_time.strftime('%m/%d %H:%M')}")
+
+    if not ping_only:
+        dls = [p.download for p in point_list]
+        uls = [p.upload for p in point_list]
+        ax1.plot([t.timestamp() - first_time.timestamp() for t in times], dls, marker='o', label="Download", color='r')
+        ax1.plot([t.timestamp() - first_time.timestamp() for t in times], uls, marker='x', label="Upload", color='b')
+        plt.legend(loc='upper center')
+        plt.title(f"Transfer speed from {first_time.strftime('%m/%d %H:%M')} to {last_time.strftime('%m/%d %H:%M')}")
+    else:
+        pings = [p.ping for p in point_list]
+        ax1.plot([t.timestamp() - first_time.timestamp() for t in times], pings, marker='x', label="Upload", color='b')
+        plt.legend(loc='upper center')
+        plt.title(f"Ping times from {first_time.strftime('%m/%d %H:%M')} to {last_time.strftime('%m/%d %H:%M')}")
 
     fig.savefig(outfile)
 
@@ -81,6 +88,7 @@ def main():
     outfile = args['--outfile']
     start_timestr = args['--start']
     end_timestr = args['--end']
+    ping_graph = args['--ping']
 
     if start_timestr:
         start_time = datetime.datetime.strptime(start_timestr, "%Y-%m-%d_%H:%M").timestamp()
@@ -93,6 +101,4 @@ def main():
         endtime = datetime.datetime.now().timestamp()
 
     points = get_datapoints(data_dir, start_time, endtime)
-    make_graph(points, outfile)
-
-
+    make_xfer_graph(points, outfile, ping_graph)
