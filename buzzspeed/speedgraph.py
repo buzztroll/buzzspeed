@@ -3,6 +3,8 @@ import docopt
 import json
 import os
 import matplotlib.pyplot as plt
+import numpy
+import statistics
 
 
 g_usage = f'''
@@ -13,8 +15,8 @@ Options:
   -h --help           Show this screen.
   --start=<str>       The date to begin graphing (YYYY-MM-DD_hh:mm)
   --end=<str>         The date to stop graphing (YYYY-MM-DD_hh:mm)
-  --outfile=<path>    The image file that will created [default: graph.png]
-  --ping              Make transfer graph (will not make transfer graph)
+  --outfile=<path>    The base path and file name for the output file. It will be appended
+                      with the graph type (ping.png, download.png, or upload.png) [default: graph]
 '''
 
 
@@ -34,34 +36,63 @@ class DataPoint(object):
             self.timestamp = datetime.datetime.strptime(d['timestamp'], "%Y-%m-%dT%H:%M:%S.%fZ")
 
 
-def make_xfer_graph(point_list, outfile, ping_only=False):
+def list_avg(l):
+    total = 0.0
+    for i in l:
+        total += i
+    return total / len(l)
+
+
+def moving_average(value_list, window_size=15):
+    window = []
+    back = int(window_size / 2)
+    list_len = len(value_list)
+    floating_range = [0] * list_len
+
+    for i in range(0, list_len+back):
+        if i < list_len:
+            v = value_list[i]
+            window.append(v)
+        if i > window_size:
+            window.pop(0)
+        avg = list_avg(window)
+        if i < window_size:
+            floating_range[i] = avg
+        else:
+            floating_range[i-back] = avg
+
+    return floating_range
+
+
+def make_xfer_graph(time_data, ydata, outfile, ylabel, title):
     fig, ax1 = plt.subplots(figsize=(12, 9))
 
-    first_time = point_list[0].timestamp
-    last_time = point_list[-1].timestamp
+    list_len = len(time_data)
 
-    times = [p.timestamp for p in point_list]
+    median_vals = [statistics.median(ydata)] * list_len
+    mean_vals = [statistics.mean(ydata)] * list_len
+    ninety_vals = [numpy.percentile(ydata, 90)] * list_len
+    ten_vals = [numpy.percentile(ydata, 10)] * list_len
 
-    tick_space = int(len(times) / 3)
-    xticks = times[0::tick_space]
+    first_time = time_data[0]
+    last_time = time_data[-1]
+
+    tick_space = int(len(time_data) / 3)
+    xticks = time_data[0::tick_space]
     ax1.set_xticks([t.timestamp() - first_time.timestamp() for t in xticks])
     ax1.set_xticklabels([t.strftime("%m/%d %H:%M") for t in xticks])
     ax1.grid(axis='y')
 
-    if not ping_only:
-        ax1.set(xlabel='time', ylabel='ms', title='Transfer Speeds')
-        dls = [p.download for p in point_list]
-        uls = [p.upload for p in point_list]
-        ax1.plot([t.timestamp() - first_time.timestamp() for t in times], dls, marker='o', label="Download", color='r')
-        ax1.plot([t.timestamp() - first_time.timestamp() for t in times], uls, marker='x', label="Upload", color='b')
-        plt.legend(loc='upper center')
-        plt.title(f"Transfer speed from {first_time.strftime('%m/%d %H:%M')} to {last_time.strftime('%m/%d %H:%M')}")
-    else:
-        ax1.set(xlabel='time', ylabel='mbps', title='Transfer Speeds')
-        pings = [p.ping for p in point_list]
-        ax1.plot([t.timestamp() - first_time.timestamp() for t in times], pings, marker='x', label="Upload", color='b')
-        plt.legend(loc='upper center')
-        plt.title(f"Ping times from {first_time.strftime('%m/%d %H:%M')} to {last_time.strftime('%m/%d %H:%M')}")
+    ax1.set(xlabel="time", ylabel=ylabel, title=title)
+    mv_avgs = moving_average(ydata)
+    ax1.plot(time_data, ydata, marker='x', label=title, color='b')
+    ax1.plot(time_data, mv_avgs, label="moving average", color='r')
+    ax1.plot(time_data, median_vals, label="median", color='y')
+    ax1.plot(time_data, mean_vals, label="average", color='g')
+    ax1.plot(time_data, ninety_vals, label="90th")
+    ax1.plot(time_data, ten_vals, label="10th", color='c')
+    plt.legend(loc='upper left')
+    plt.title(f"{title} from {first_time.strftime('%m/%d %H:%M')} to {last_time.strftime('%m/%d %H:%M')}")
 
     fig.savefig(outfile)
 
@@ -90,7 +121,6 @@ def main():
     outfile = args['--outfile']
     start_timestr = args['--start']
     end_timestr = args['--end']
-    ping_graph = args['--ping']
 
     if start_timestr:
         start_time = datetime.datetime.strptime(start_timestr, "%Y-%m-%d_%H:%M").timestamp()
@@ -103,4 +133,14 @@ def main():
         endtime = datetime.datetime.now().timestamp()
 
     points = get_datapoints(data_dir, start_time, endtime)
-    make_xfer_graph(points, outfile, ping_graph)
+
+    time_data = [i.timestamp for i in points]
+
+    ping_data = [i.ping for i in points]
+    make_xfer_graph(time_data, ping_data, f"{outfile}-ping.png", "ms", "ping times")
+
+    dl_data = [i.download for i in points]
+    make_xfer_graph(time_data, dl_data, f"{outfile}-download.png", "mbps", "download speeds")
+
+    ul_data = [i.upload for i in points]
+    make_xfer_graph(time_data, ul_data, f"{outfile}-upload.png", "mbps", "upload speeds")
